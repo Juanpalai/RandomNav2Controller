@@ -7,17 +7,32 @@ from nav2_simple_commander.robot_navigator import BasicNavigator
 from geometry_msgs.msg import PoseStamped
 
 class Nav2Controller(Node):
+    """
+    A ROS2 node to control a robot using the Nav2 navigation stack.
+    """
     def __init__(self):
+        """
+        Initialize the Nav2Controller node and the BasicNavigator.
+        """
         super().__init__('nav2_controller')
         self.navigator = BasicNavigator()
         self.navigator.waitUntilNav2Active()
     
-    def set_initial_pose(self):
+    def set_initial_pose(self) -> None:
+        """
+        Set the initial pose of the robot in the environment.
+        """
         pose_stamped = self.create_pose(-2.0437519550323486, -0.5062426328659058, 0.0,
                                         0.0, 0.0, -1.8680213426256463e-06, 0.9999999999982553)
         self.navigator.setInitialPose(pose_stamped)
 
-    def navigate_to_pose(self, pose):
+    def navigate_to_pose(self, pose) -> None:
+        """
+        Navigate the robot to a given pose.
+        
+        Parameters:
+        pose (PoseStamped): The target pose to navigate to.
+        """
         self.navigator.goToPose(pose)        
 
         while not self.navigator.isTaskComplete():
@@ -28,7 +43,17 @@ class Nav2Controller(Node):
         self.move()
         
 
-    def create_pose(self, x, y, z, qx, qy, qz, qw):
+    def create_pose(self, x, y, z, qx, qy, qz, qw) -> PoseStamped:
+        """
+        Create a PoseStamped message.
+        
+        Parameters:
+        x, y, z (float): Position coordinates.
+        qx, qy, qz, qw (float): Orientation as a quaternion.
+        
+        Returns:
+        PoseStamped: The created PoseStamped message.
+        """
         pose = PoseStamped()
         pose.header.frame_id = 'map'
         pose.header.stamp = self.get_clock().now().to_msg()
@@ -41,7 +66,10 @@ class Nav2Controller(Node):
         pose.pose.orientation.w = qw
         return pose
     
-    def move(self):
+    def move(self) -> None:
+        """
+        Move the robot to a random pose within a specified range.
+        """
         random_X = random.uniform(-1.5, 1.5)
         random_Y = random.uniform(-1.5, 1.5)
         random_orientation_Z = random.uniform(-1, 1)
@@ -49,6 +77,9 @@ class Nav2Controller(Node):
         self.navigate_to_pose(destination_pose)
 
 def main(args=None):
+    """
+    Main function to initialize the ROS2 node and start the navigation process.
+    """
     rclpy.init(args=args)
     navigator = Nav2Controller()  
     
