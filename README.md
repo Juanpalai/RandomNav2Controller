@@ -2,8 +2,8 @@
 
 RandomNav2Controller is a ROS 2 package that utilizes the Navigation 2 (Nav2) stack to control a TurtleBot3 robot in a simulated environment. The robot is programmed to navigate to random positions within a specified area.
 <p align="center">
-    <img src="Screenshots/gazebo.png" alt="TurtleBot3 Gazebo" width="300" height="150">
-    <img src="Screenshots/rviz.png" alt="Nav2 Rviz" width="300" height="150">
+    <img src="Screenshots/gazebo.png" alt="TurtleBot3 Gazebo" width="400" height="200">
+    <img src="Screenshots/rviz.png" alt="Nav2 Rviz" width="400" height="200">
 </p>
 
 ### Features
