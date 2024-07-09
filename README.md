@@ -7,21 +7,24 @@ RandomNav2Controller is a ROS 2 package that utilizes the Navigation 2 (Nav2) st
 - Navigate to a given pose
 - Navigate to random poses within a specified area
 
+### Requirements
+- Ubuntu Linux - Jammy Jellyfish (22.04)
+
 ### Installation
 
 #### Install Dependent ROS 2 Packages
 
-1. Open a terminal with `Ctrl+Alt+T`.
-2. Install Gazebo:
+1. Install the ROS 2 binary packages as described in the [official ROS 2 docs](https://docs.ros.org/en/humble/Installation.html).
+2. Open a terminal with `Ctrl+Alt+T`.
+3. Install Gazebo:
     ```sh
     sudo apt install ros-humble-gazebo-*
     ```
-3. Install Cartographer:
+4. Install Cartographer:
     ```sh
     sudo apt install ros-humble-cartographer
     sudo apt install ros-humble-cartographer-ros
     ```
-4. Install the ROS 2 binary packages as described in the [official ROS 2 docs](https://docs.ros.org/en/humble/Installation.html).
 5. Install the Nav2 packages:
     ```sh
     sudo apt install ros-humble-navigation2
