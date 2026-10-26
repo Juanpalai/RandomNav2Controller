@@ -3,9 +3,18 @@
 <package format="3">
   <name>turtlebot3_nav2</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="toyota@todo.todo">toyota</maintainer>
+  <description>Drive a TurtleBot3 to random goals using the Nav2 simple commander.</description>
+  <maintainer email="juan.pablo.lagosi@gmail.com">Juan Pablo Lagos Idrobo</maintainer>
   <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>nav2_simple_commander</exec_depend>
+  <exec_depend>rclpy</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

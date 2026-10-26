@@ -37,6 +37,13 @@ CMakeLists.txt.user
 srv/_*.py
 *.pcd
 *.pyc
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+.DS_Store
 qtcreator-*
 *.user
 

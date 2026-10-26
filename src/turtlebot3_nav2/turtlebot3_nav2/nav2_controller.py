@@ -1,94 +1,182 @@
 #!/usr/bin/env python3
 
-import rclpy
-from rclpy.node import Node
-import random
-from nav2_simple_commander.robot_navigator import BasicNavigator
+"""Navigate a TurtleBot3 to random goals using the Nav2 simple commander."""
+
+import time
+
 from geometry_msgs.msg import PoseStamped
+from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
+import rclpy
+from rclpy.executors import ExternalShutdownException
 
-class Nav2Controller(Node):
-    """
-    A ROS2 node to control a robot using the Nav2 navigation stack.
-    """
-    def __init__(self):
-        """
-        Initialize the Nav2Controller node and the BasicNavigator.
-        """
-        super().__init__('nav2_controller')
-        self.navigator = BasicNavigator()
-        self.navigator.waitUntilNav2Active()
-    
-    def set_initial_pose(self) -> None:
-        """
-        Set the initial pose of the robot in the environment.
-        """
-        pose_stamped = self.create_pose(-2.0437519550323486, -0.5062426328659058, 0.0,
-                                        0.0, 0.0, -1.8680213426256463e-06, 0.9999999999982553)
-        self.navigator.setInitialPose(pose_stamped)
+from turtlebot3_nav2.geometry import yaw_to_quaternion
+from turtlebot3_nav2.goal_sampler import sample_goal
 
-    def navigate_to_pose(self, pose) -> None:
-        """
-        Navigate the robot to a given pose.
-        
-        Parameters:
-        pose (PoseStamped): The target pose to navigate to.
-        """
-        self.navigator.goToPose(pose)        
 
-        while not self.navigator.isTaskComplete():
-            feedback = self.navigator.getFeedback()
-            if feedback.navigation_time.sec > 600:
-                self.navigator.cancelTask()
-        print('Goal succeeded!')
-        self.move()
-        
+class Nav2Controller:
+    """Drive a robot to random goals until the process is stopped."""
 
-    def create_pose(self, x, y, z, qx, qy, qz, qw) -> PoseStamped:
-        """
-        Create a PoseStamped message.
-        
-        Parameters:
-        x, y, z (float): Position coordinates.
-        qx, qy, qz, qw (float): Orientation as a quaternion.
-        
-        Returns:
-        PoseStamped: The created PoseStamped message.
-        """
+    CANCEL_GRACE_PERIOD_SEC = 5.0
+
+    def __init__(self) -> None:
+        """Create the Nav2 node and load its configuration."""
+        self.navigator = BasicNavigator(node_name='nav2_controller')
+        self._declare_parameters()
+        self._read_parameters()
+
+    def _declare_parameters(self) -> None:
+        """Declare the parameters that configure the controller."""
+        self.navigator.declare_parameter('frame_id', 'map')
+        self.navigator.declare_parameter('initial_pose.x', -2.0437519550323486)
+        self.navigator.declare_parameter('initial_pose.y', -0.5062426328659058)
+        self.navigator.declare_parameter('initial_pose.z', 0.0)
+        self.navigator.declare_parameter('initial_pose.yaw', 0.0)
+        self.navigator.declare_parameter('goal_area.min_x', -1.5)
+        self.navigator.declare_parameter('goal_area.max_x', 1.5)
+        self.navigator.declare_parameter('goal_area.min_y', -1.5)
+        self.navigator.declare_parameter('goal_area.max_y', 1.5)
+        self.navigator.declare_parameter('navigation_timeout_sec', 600.0)
+
+    def _read_parameters(self) -> None:
+        """Read and validate the configured parameters."""
+        get_parameter = self.navigator.get_parameter
+
+        self._frame_id = str(get_parameter('frame_id').value)
+        self._initial_pose = (
+            float(get_parameter('initial_pose.x').value),
+            float(get_parameter('initial_pose.y').value),
+            float(get_parameter('initial_pose.z').value),
+            float(get_parameter('initial_pose.yaw').value),
+        )
+        self._goal_min_x = float(get_parameter('goal_area.min_x').value)
+        self._goal_max_x = float(get_parameter('goal_area.max_x').value)
+        self._goal_min_y = float(get_parameter('goal_area.min_y').value)
+        self._goal_max_y = float(get_parameter('goal_area.max_y').value)
+        self._navigation_timeout = float(
+            get_parameter('navigation_timeout_sec').value
+        )
+
+        if self._goal_min_x > self._goal_max_x:
+            raise ValueError('goal_area.min_x must be <= goal_area.max_x')
+        if self._goal_min_y > self._goal_max_y:
+            raise ValueError('goal_area.min_y must be <= goal_area.max_y')
+        if self._navigation_timeout <= 0.0:
+            raise ValueError('navigation_timeout_sec must be greater than zero')
+        if not self._frame_id:
+            raise ValueError('frame_id must not be empty')
+
+    def create_pose(
+        self,
+        x: float,
+        y: float,
+        z: float,
+        yaw: float,
+    ) -> PoseStamped:
+        """Create a pose in the configured map frame."""
         pose = PoseStamped()
-        pose.header.frame_id = 'map'
-        pose.header.stamp = self.get_clock().now().to_msg()
+        pose.header.frame_id = self._frame_id
+        pose.header.stamp = self.navigator.get_clock().now().to_msg()
         pose.pose.position.x = x
         pose.pose.position.y = y
         pose.pose.position.z = z
+
+        qx, qy, qz, qw = yaw_to_quaternion(yaw)
         pose.pose.orientation.x = qx
         pose.pose.orientation.y = qy
         pose.pose.orientation.z = qz
         pose.pose.orientation.w = qw
         return pose
-    
-    def move(self) -> None:
-        """
-        Move the robot to a random pose within a specified range.
-        """
-        random_X = random.uniform(-1.5, 1.5)
-        random_Y = random.uniform(-1.5, 1.5)
-        random_orientation_Z = random.uniform(-1, 1)
-        destination_pose = self.create_pose(random_X, random_Y, 0.0, 0.0, 0.0, random_orientation_Z, 1.0)
-        self.navigate_to_pose(destination_pose)
 
-def main(args=None):
-    """
-    Main function to initialize the ROS2 node and start the navigation process.
-    """
+    def create_random_pose(self) -> PoseStamped:
+        """Create a random goal pose inside the configured goal area."""
+        x, y, yaw = sample_goal(
+            self._goal_min_x,
+            self._goal_max_x,
+            self._goal_min_y,
+            self._goal_max_y,
+        )
+        return self.create_pose(x, y, 0.0, yaw)
+
+    def set_initial_pose(self) -> None:
+        """Set the robot's initial pose for localization."""
+        x, y, z, yaw = self._initial_pose
+        self.navigator.setInitialPose(self.create_pose(x, y, z, yaw))
+
+    def navigate_to_pose(self, pose: PoseStamped) -> bool:
+        """Navigate to a pose and return whether the goal succeeded."""
+        logger = self.navigator.get_logger()
+
+        if not self.navigator.goToPose(pose):
+            logger.error('Nav2 rejected the goal')
+            return False
+
+        started_at = time.monotonic()
+        while not self.navigator.isTaskComplete():
+            if time.monotonic() - started_at >= self._navigation_timeout:
+                logger.warning(
+                    'Goal timed out after %.1f seconds; canceling it',
+                    self._navigation_timeout,
+                )
+                self.navigator.cancelTask()
+                cancel_deadline = time.monotonic() + self.CANCEL_GRACE_PERIOD_SEC
+                while (not self.navigator.isTaskComplete()
+                       and time.monotonic() < cancel_deadline):
+                    pass
+                if not self.navigator.isTaskComplete():
+                    logger.error('Goal did not finish canceling; skipping result')
+                    return False
+                break
+
+        result = self.navigator.getResult()
+        if result == TaskResult.SUCCEEDED:
+            logger.info('Goal succeeded')
+            return True
+        if result == TaskResult.CANCELED:
+            logger.warning('Goal was canceled')
+        elif result == TaskResult.FAILED:
+            logger.error('Goal failed')
+        else:
+            logger.warning('Goal ended with status %s', result)
+        return False
+
+    def run(self) -> None:
+        """Wait for Nav2 and navigate to random goals indefinitely."""
+        logger = self.navigator.get_logger()
+
+        # Publish the initial pose before waiting so AMCL has a pose to report.
+        self.set_initial_pose()
+        logger.info('Waiting for Nav2 to become active')
+        self.navigator.waitUntilNav2Active()
+
+        while rclpy.ok():
+            pose = self.create_random_pose()
+            logger.info(
+                'Navigating to (%.2f, %.2f)',
+                pose.pose.position.x,
+                pose.pose.position.y,
+            )
+            self.navigate_to_pose(pose)
+
+    def destroy_node(self) -> None:
+        """Destroy the underlying Nav2 node and its action clients."""
+        self.navigator.destroy_node()
+
+
+def main(args=None) -> None:
+    """Initialize ROS 2, run the controller, and shut down cleanly."""
     rclpy.init(args=args)
-    navigator = Nav2Controller()  
-    
-    navigator.set_initial_pose()
-    navigator.move()
+    controller = None
+    try:
+        controller = Nav2Controller()
+        controller.run()
+    except (KeyboardInterrupt, ExternalShutdownException):
+        pass
+    finally:
+        if controller is not None:
+            controller.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
-    rclpy.spin(navigator)
-    navigator.destroy_node()
-    rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
