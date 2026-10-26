@@ -6,6 +6,7 @@ import time
 
 from geometry_msgs.msg import PoseStamped
 from nav2_simple_commander.robot_navigator import BasicNavigator, TaskResult
+from rcl_interfaces.msg import ParameterDescriptor
 import rclpy
 from rclpy.executors import ExternalShutdownException
 
@@ -17,25 +18,57 @@ class Nav2Controller:
     """Drive a robot to random goals until the process is stopped."""
 
     CANCEL_GRACE_PERIOD_SEC = 5.0
+    RETRY_DELAY_SEC = 1.0
 
     def __init__(self) -> None:
         """Create the Nav2 node and load its configuration."""
         self.navigator = BasicNavigator(node_name='nav2_controller')
+        self._active_goal = False
         self._declare_parameters()
         self._read_parameters()
 
+    def _declare_parameter(self, name: str, value, description: str) -> None:
+        """Declare a read-only startup parameter with a description."""
+        self.navigator.declare_parameter(
+            name,
+            value,
+            descriptor=ParameterDescriptor(
+                description=description,
+                read_only=True,
+            ),
+        )
+
     def _declare_parameters(self) -> None:
         """Declare the parameters that configure the controller."""
-        self.navigator.declare_parameter('frame_id', 'map')
-        self.navigator.declare_parameter('initial_pose.x', -2.0437519550323486)
-        self.navigator.declare_parameter('initial_pose.y', -0.5062426328659058)
-        self.navigator.declare_parameter('initial_pose.z', 0.0)
-        self.navigator.declare_parameter('initial_pose.yaw', 0.0)
-        self.navigator.declare_parameter('goal_area.min_x', -1.5)
-        self.navigator.declare_parameter('goal_area.max_x', 1.5)
-        self.navigator.declare_parameter('goal_area.min_y', -1.5)
-        self.navigator.declare_parameter('goal_area.max_y', 1.5)
-        self.navigator.declare_parameter('navigation_timeout_sec', 600.0)
+        self._declare_parameter(
+            'frame_id', 'map', 'Frame used for goal and initial poses')
+        self._declare_parameter(
+            'initial_pose.x',
+            -2.0437519550323486,
+            'Initial pose X coordinate in the map frame',
+        )
+        self._declare_parameter(
+            'initial_pose.y',
+            -0.5062426328659058,
+            'Initial pose Y coordinate in the map frame',
+        )
+        self._declare_parameter(
+            'initial_pose.z', 0.0, 'Initial pose Z coordinate in the map frame')
+        self._declare_parameter(
+            'initial_pose.yaw', 0.0, 'Initial pose yaw in radians')
+        self._declare_parameter(
+            'goal_area.min_x', -1.5, 'Minimum random goal X coordinate')
+        self._declare_parameter(
+            'goal_area.max_x', 1.5, 'Maximum random goal X coordinate')
+        self._declare_parameter(
+            'goal_area.min_y', -1.5, 'Minimum random goal Y coordinate')
+        self._declare_parameter(
+            'goal_area.max_y', 1.5, 'Maximum random goal Y coordinate')
+        self._declare_parameter(
+            'navigation_timeout_sec',
+            600.0,
+            'Seconds to wait for a goal before canceling it',
+        )
 
     def _read_parameters(self) -> None:
         """Read and validate the configured parameters."""
@@ -110,6 +143,7 @@ class Nav2Controller:
             logger.error('Nav2 rejected the goal')
             return False
 
+        self._active_goal = True
         started_at = time.monotonic()
         while not self.navigator.isTaskComplete():
             if time.monotonic() - started_at >= self._navigation_timeout:
@@ -127,6 +161,7 @@ class Nav2Controller:
                     return False
                 break
 
+        self._active_goal = False
         result = self.navigator.getResult()
         if result == TaskResult.SUCCEEDED:
             logger.info('Goal succeeded')
@@ -155,7 +190,19 @@ class Nav2Controller:
                 pose.pose.position.x,
                 pose.pose.position.y,
             )
-            self.navigate_to_pose(pose)
+            if not self.navigate_to_pose(pose):
+                time.sleep(self.RETRY_DELAY_SEC)
+
+    def cancel_navigation(self) -> None:
+        """Cancel an active goal so the robot stops when the node exits."""
+        if not self._active_goal:
+            return
+        self._active_goal = False
+        try:
+            self.navigator.cancelTask()
+        except (ExternalShutdownException, RuntimeError):
+            # The context may already be shutting down; nothing left to do.
+            pass
 
     def destroy_node(self) -> None:
         """Destroy the underlying Nav2 node and its action clients."""
@@ -173,6 +220,7 @@ def main(args=None) -> None:
         pass
     finally:
         if controller is not None:
+            controller.cancel_navigation()
             controller.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

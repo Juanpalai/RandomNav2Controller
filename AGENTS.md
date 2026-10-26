@@ -17,7 +17,7 @@
 
 ```sh
 source /opt/ros/humble/setup.bash
-colcon build --packages-select turtlebot3_nav2   # run from repo root
+colcon build --symlink-install --packages-select turtlebot3_nav2   # repo root
 source install/setup.bash
 ros2 launch turtlebot3_nav2 turtlebot3_nav2_launch.py headless:=False
 # or, with Nav2 already running:
@@ -37,7 +37,7 @@ ros2 run turtlebot3_nav2 nav2_controller --ros-args -p use_sim_time:=true
 
 ## Controller behavior
 
-- Parameters (defaults preserve the demo): `frame_id`, `initial_pose.{x,y,z,yaw}`, `goal_area.{min_x,max_x,min_y,max_y}` (±1.5), `navigation_timeout_sec` (600).
+- Parameters (defaults preserve the demo): `frame_id`, `initial_pose.{x,y,z,yaw}`, `goal_area.{min_x,max_x,min_y,max_y}` (±1.5), `navigation_timeout_sec` (600). They are declared read-only after startup; restart the node to change them.
 - `run()` loops forever, samples one random goal at a time, and logs the actual `TaskResult`; it is no longer recursive. Keep it iterative.
 - Random yaw uses a normalized quaternion in `geometry.py`; goal sampling/validation is in `goal_sampler.py`. Keep pure logic there so it stays testable without ROS.
 - `Nav2Controller` owns a single `BasicNavigator` node named `nav2_controller`; it is not itself an rclpy Node. Destroy the navigator in `main()`'s `finally` block.

@@ -31,9 +31,7 @@ then install the simulation and navigation dependencies:
 
 ```sh
 sudo apt install ros-humble-gazebo-*
-sudo apt install ros-humble-cartographer ros-humble-cartographer-ros
 sudo apt install ros-humble-navigation2 ros-humble-nav2-bringup
-sudo apt install ros-humble-nav2-simple-commander
 sudo apt install ros-humble-turtlebot3-gazebo
 sudo apt install ros-humble-dynamixel-sdk ros-humble-turtlebot3-msgs
 sudo apt install ros-humble-turtlebot3
@@ -45,7 +43,7 @@ From the repository root:
 
 ```sh
 source /opt/ros/humble/setup.bash
-colcon build --packages-select turtlebot3_nav2
+colcon build --symlink-install --packages-select turtlebot3_nav2
 source install/setup.bash
 ```
 
@@ -87,8 +85,9 @@ and then navigates to random goals until you stop it with `Ctrl+C`.
 
 ### Configuration
 
-All parameters have defaults that match the original demo. Override them with
-`--ros-args -p <name>:=<value>`.
+The controller parameters below have defaults that match the original demo.
+They are read at startup and marked read-only; restart the node after changing
+them. Override them with `--ros-args -p <name>:=<value>`.
 
 | Parameter | Default | Description |
 | --- | --- | --- |
